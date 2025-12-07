@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <!-- 关键：禁止用户缩放，设置视口宽度 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Minesweeper Win7 Mobile</title>
+    <style>
+        /* ============ CSS 样式 ============ */
+        body {
+            background-color: #f0f0f0;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden; /* 防止页面滚动 */
+            user-select: none;
+            -webkit-user-select: none;
+            cursor: default;
+            /* 消除移动端点击高亮 */
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* 缩放容器：用于整体缩放游戏窗口 */
+        #scaler {
+            transform-origin: center center;
+            transition: transform 0.2s ease-out;
+        }
+
+        #game-window {
+            background: linear-gradient(to bottom, #eef3fa 0%, #d4e3f3 100%);
+            border: 1px solid #688caf;
+            border-radius: 4px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.3);
+            padding: 3px;
+            display: inline-block;
+        }
+
+        /* 菜单栏 - 手机端加大一点点击区域 */
+        .menubar {
+            font-size: 14px;
+            color: #000;
+            padding: 5px;
+            background: transparent;
+            margin-bottom: 2px;
+            display: flex;
+            gap: 15px;
+        }
+        .menubar span {
+            cursor: pointer;
+            padding: 2px 6px;
+        }
+        .menubar span:active {
+            color: #0066cc;
+            background-color: rgba(255,255,255,0.5);
+            border-radius: 2px;
+        }
+
+        .game-panel {
+            background-color: #c0c0c0;
+            border-left: 2px solid #fff; border-top: 2px solid #fff;
+            border-right: 2px solid #808080; border-bottom: 2px solid #808080;
+            padding: 5px;
+        }
+
+        /* 头部：修复了对齐问题 */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 2px solid #808080; border-top: 2px solid #808080;
+            border-right: 2px solid #fff; border-bottom: 2px solid #fff;
+            padding: 4px 7px;
+            margin-bottom: 5px;
+            background: #c0c0c0;
+            height: 30px;
+        }
+
+        .counter {
+            background-color: #000; color: #ff0000;
+            font-family: "Courier New", Courier, monospace;
+            font-weight: bold; font-size: 24px; line-height: 24px;
+            padding: 1px; width: 42px; text-align: right;
+            border-left: 1px solid #808080; border-top: 1px solid #808080;
+            border-right: 1px solid #fff; border-bottom: 1px solid #fff;
+            letter-spacing: 1px;
+            height: 24px; 
+            box-sizing: content-box; 
+        }
+
+        /* 笑脸按钮 - Flex居中 */
+        #face-btn {
+            width: 26px; height: 26px;
+            border: 1px solid #808080; outline: none;
+            background: #c0c0c0;
+            display: flex; justify-content: center; align-items: center;
+            padding: 0; margin: 0;
+            font-size: 18px; cursor: pointer;
+            border-left: 1px solid #fff; border-top: 1px solid #fff;
+            border-right: 1px solid #808080; border-bottom: 1px solid #808080;
+            box-shadow: inset 1px 1px 0 #fff;
+        }
+        #face-btn:active {
+            border-left: 1px solid #808080; border-top: 1px solid #808080;
+            border-right: 1px solid #fff; border-bottom: 1px solid #fff;
+            box-shadow: none;
+            padding-top: 2px; padding-left: 2px;
+        }
+
+        #grid {
+            display: grid;
+            border-left: 3px solid #808080; border-top: 3px solid #808080;
+            border-right: 3px solid #fff; border-bottom: 3px solid #fff;
+            touch-action: none; /* 禁止浏览器默认触摸行为（滚动缩放） */
+        }
+
+        .cell {
+            width: 16px; height: 16px; line-height: 16px; text-align: center;
+            font-size: 12px; font-weight: 900;
+            background: #c0c0c0;
+            border-left: 2px solid #fff; border-top: 2px solid #fff;
+            border-right: 2px solid #808080; border-bottom: 2px solid #808080;
+        }
+        
+        /* 触摸反馈样式 */
+        .cell.pressed {
+            border: none; width: 20px; height: 20px;
+            background: #bdbdbd;
+        }
+
+        .cell.open {
+            border: 1px solid #777; width: 18px; height: 18px; background: #c0c0c0;
+        }
+
+        /* 颜色定义 */
+        .c1 { color: blue; } .c2 { color: green; } .c3 { color: red; }
+        .c4 { color: darkblue; } .c5 { color: darkred; } .c6 { color: darkcyan; }
+        .c7 { color: black; } .c8 { color: gray; }
+
+        .cell.mine { background-color: #c0c0c0; }
+        .cell.mine-exploded { background-color: red; border: 1px solid #777; width: 18px; height: 18px; }
+        .cell.flag { color: red; }
+        .cell.wrong-mine { position: relative; }
+        .cell.wrong-mine::after {
+            content: "❌"; color: red; font-size: 14px; position: absolute;
+            left: -1px; top: 0; width: 100%; height: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 增加一个缩放层 -->
+    <div id="scaler">
+        <div id="game-window">
+            <div class="menubar">
+                <span onclick="setDifficulty('beginner')">初级</span>
+                <span onclick="setDifficulty('intermediate')">中级</span>
+                <span onclick="setDifficulty('expert')">高级</span>
+            </div>
+            
+            <div class="game-panel">
+                <div class="header">
+                    <div id="mine-count" class="counter">010</div>
+                    <button id="face-btn">😊</button>
+                    <div id="timer" class="counter">000</div>
+                </div>
+                <div id="grid"></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const CONFIG = {
+        beginner: { rows: 9, cols: 9, mines: 10 },
+        intermediate: { rows: 16, cols: 16, mines: 40 },
+        expert: { rows: 16, cols: 30, mines: 99 }
+    };
+
+    let currentConfig = CONFIG.beginner;
+    let gridData = [];
+    let isGameOver = false;
+    let isFirstClick = true;
+    let timerInterval = null;
+    let timeElapsed = 0;
+    let flagsUsed = 0;
+    let cellsOpened = 0;
+
+    // 鼠标状态（桌面端）
+    let isLeftDown = false;
+    let isRightDown = false;
+    let isDualActionTriggered = false;
+
+    // 触摸状态（移动端）
+    let longPressTimer = null;
+    let isTouchMove = false;
+    const LONG_PRESS_DURATION = 350; // 长按判定时间(ms)
+
+    const gridEl = document.getElementById('grid');
+    const mineCountEl = document.getElementById('mine-count');
+    const timerEl = document.getElementById('timer');
+    const faceBtn = document.getElementById('face-btn');
+    const scalerEl = document.getElementById('scaler');
+    const gameWindowEl = document.getElementById('game-window');
+
+    function initGame(configName = null) {
+        if (configName) currentConfig = CONFIG[configName];
+        
+        isGameOver = false;
+        isFirstClick = true;
+        timeElapsed = 0;
+        flagsUsed = 0;
+        cellsOpened = 0;
+        gridData = [];
+        
+        // Reset states
+        isLeftDown = false; isRightDown = false; isDualActionTriggered = false;
+        isTouchMove = false;
+
+        clearInterval(timerInterval);
+        timerEl.innerText = "000";
+        updateMineCount();
+        faceBtn.innerText = "😊";
+
+        // 生成网格
+        gridEl.style.gridTemplateColumns = `repeat(${currentConfig.cols}, 20px)`;
+        gridEl.style.gridTemplateRows = `repeat(${currentConfig.rows}, 20px)`;
+        gridEl.innerHTML = '';
+
+        for (let r = 0; r < currentConfig.rows; r++) {
+            for (let c = 0; c < currentConfig.cols; c++) {
+                const cell = document.createElement('div');
+                cell.classList.add('cell');
+                cell.dataset.r = r;
+                cell.dataset.c = c;
+                gridEl.appendChild(cell);
+
+                gridData.push({
+                    r, c,
+                    isMine: false, isOpen: false, isFlagged: false, neighborMines: 0,
+                    element: cell
+                });
+            }
+        }
+        
+        // 游戏初始化后，立即适应屏幕
+        setTimeout(fitToScreen, 10);
+    }
+
+    /**
+     * 适配屏幕：计算缩放比例
+     */
+    function fitToScreen() {
+        const padding = 20;
+        const screenW = window.innerWidth - padding;
+        const screenH = window.innerHeight - padding;
+        const gameW = gameWindowEl.offsetWidth;
+        const gameH = gameWindowEl.offsetHeight;
+
+        // 计算宽和高的缩放比例，取较小值以完全容纳
+        let scale = Math.min(screenW / gameW, screenH / gameH);
+        
+        // 桌面端如果不超出屏幕，不要放大超过 1.5 倍，否则太糊
+        // 移动端通常允许放大填满宽度
+        if (scale > 2.5) scale = 2.5; 
+        
+        // 如果屏幕足够大（比如电脑全屏），不要让它太小，至少保持1
+        // 但如果屏幕很小（手机），scale可能会小于1（如果列数很多）或者大于1
+        
+        scalerEl.style.transform = `scale(${scale})`;
+    }
+    
+    // 监听窗口大小改变
+    window.addEventListener('resize', fitToScreen);
+    window.setDifficulty = function(level) { initGame(level); }
+
+
+    /* ================= 交互逻辑 (兼容鼠标与触摸) ================= */
+
+    // 禁用右键菜单
+    gridEl.addEventListener('contextmenu', e => e.preventDefault());
+
+    // ------------------ 鼠标事件 (Desktop) ------------------
+    gridEl.addEventListener('mousedown', (e) => {
+        if (isGameOver || !e.target.classList.contains('cell')) return;
+        // 忽略触摸触发的 mousedown (防止重复)
+        
+        if (e.button === 0) isLeftDown = true;
+        if (e.button === 2) isRightDown = true;
+        if (e.button === 1) isDualActionTriggered = true; 
+
+        faceBtn.innerText = "😮";
+    });
+
+    gridEl.addEventListener('mouseup', (e) => {
+        if (isGameOver || !e.target.classList.contains('cell')) return;
+        faceBtn.innerText = "😊";
+        const data = getCellData(e.target);
+
+        // 中键
+        if (e.button === 1) {
+            chord(data);
+            isDualActionTriggered = false;
+            return;
+        }
+        // 双键松开逻辑
+        if (isLeftDown && isRightDown) {
+            isDualActionTriggered = true; 
+            chord(data);
+        }
+        // 处理锁
+        if (isDualActionTriggered) {
+            if (e.button === 0) isLeftDown = false;
+            if (e.button === 2) isRightDown = false;
+            if (!isLeftDown && !isRightDown) isDualActionTriggered = false;
+            return;
+        }
+
+        // 单点逻辑
+        if (e.button === 0) { // 左键
+            isLeftDown = false;
+            handleLeftClick(data);
+        } else if (e.button === 2) { // 右键
+            isRightDown = false;
+            handleRightClick(data);
+        }
+    });
+    
+    // 鼠标移出重置
+    gridEl.addEventListener('mouseleave', () => {
+        isLeftDown = false; isRightDown = false; faceBtn.innerText = "😊";
+    });
+
+
+    // ------------------ 触摸事件 (Mobile) ------------------
+    // 逻辑：短按=左键，长按=右键，点击数字=双键探雷
+    
+    gridEl.addEventListener('touchstart', (e) => {
+        if (isGameOver || !e.target.classList.contains('cell')) return;
+        const cell = e.target;
+        const data = getCellData(cell);
+        
+        isTouchMove = false;
+        faceBtn.innerText = "😮";
+        
+        // 视觉反馈
+        if (!data.isOpen && !data.isFlagged) cell.classList.add('pressed');
+
+        // 长按计时器
+        longPressTimer = setTimeout(() => {
+            // 长按触发：插旗
+            if (!isTouchMove) {
+                navigator.vibrate && navigator.vibrate(50); // 震动反馈
+                handleRightClick(data);
+                isTouchMove = true; // 标记已处理，防止 touchend 再次触发左键
+                cell.classList.remove('pressed');
+                faceBtn.innerText = "😊";
+            }
+        }, LONG_PRESS_DURATION);
+    }, {passive: false});
+
+    gridEl.addEventListener('touchmove', (e) => {
+        // 如果手指移动了，取消长按，也取消点击
+        isTouchMove = true;
+        clearTimeout(longPressTimer);
+        const cell = document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY);
+        // 简单的视觉处理：如果移出原本格子，移除 pressed
+        // 这里略过复杂的 DOM 查找优化
+    }, {passive: false});
+
+    gridEl.addEventListener('touchend', (e) => {
+        if (isGameOver) return;
+        e.preventDefault(); // 阻止后续的 mouse 事件
+        clearTimeout(longPressTimer);
+        faceBtn.innerText = "😊";
+        
+        // 移除视觉反馈
+        const cells = gridEl.querySelectorAll('.pressed');
+        cells.forEach(c => c.classList.remove('pressed'));
+
+        if (!isTouchMove && e.target.classList.contains('cell')) {
+            const data = getCellData(e.target);
+            // 短按逻辑
+            handleLeftClick(data); 
+        }
+    });
+
+
+    /* ================= 游戏核心逻辑 ================= */
+
+    function handleLeftClick(data) {
+        if (data.isFlagged) return;
+
+        // 如果点击的是已打开的数字 -> 触发探雷 (Mobile 核心交互)
+        if (data.isOpen && data.neighborMines > 0) {
+            chord(data);
+            return;
+        }
+
+        if (isFirstClick) {
+            startTimer();
+            placeMines(data.r, data.c);
+            isFirstClick = false;
+            const newData = getCellData(data.element);
+            openCell(newData);
+        } else {
+            if (data.isMine) explode(data);
+            else openCell(data);
+        }
+    }
+
+    function handleRightClick(data) {
+        if (!data.isOpen) toggleFlag(data);
+    }
+
+    function getCellData(element) {
+        const r = parseInt(element.dataset.r);
+        const c = parseInt(element.dataset.c);
+        return gridData[r * currentConfig.cols + c];
+    }
+
+    function openCell(data) {
+        if (data.isOpen || data.isFlagged) return;
+        data.isOpen = true;
+        cellsOpened++;
+        data.element.classList.add('open');
+        data.element.classList.remove('pressed');
+        
+        if (data.neighborMines > 0) {
+            data.element.innerText = data.neighborMines;
+            data.element.classList.add('c' + data.neighborMines);
+        } else {
+            const neighbors = getNeighbors(data);
+            neighbors.forEach(n => {
+                if(!n.isOpen && !n.isFlagged) openCell(n);
+            });
+        }
+        checkWin();
+    }
+
+    function toggleFlag(data) {
+        if (data.isFlagged) {
+            data.isFlagged = false;
+            data.element.classList.remove('flag');
+            data.element.innerText = '';
+            flagsUsed--;
+        } else {
+            data.isFlagged = true;
+            data.element.classList.add('flag');
+            data.element.innerText = '🚩';
+            flagsUsed++;
+        }
+        updateMineCount();
+    }
+
+    function chord(data) {
+        if (!data.isOpen || data.neighborMines === 0) return;
+        const neighbors = getNeighbors(data);
+        const flagCount = neighbors.filter(n => n.isFlagged).length;
+
+        if (flagCount === data.neighborMines) {
+            // 简单视觉反馈：闪烁一下周围
+            neighbors.forEach(n => {
+                if(!n.isOpen && !n.isFlagged) {
+                     n.element.classList.add('pressed');
+                     setTimeout(()=>n.element.classList.remove('pressed'), 150);
+                }
+            });
+            
+            neighbors.forEach(n => {
+                if (!n.isOpen && !n.isFlagged) {
+                    if (n.isMine) explode(n);
+                    else openCell(n);
+                }
+            });
+        }
+    }
+
+    function placeMines(safeR, safeC) {
+        let minesPlaced = 0;
+        const totalCells = currentConfig.rows * currentConfig.cols;
+        while (minesPlaced < currentConfig.mines) {
+            const idx = Math.floor(Math.random() * totalCells);
+            const r = Math.floor(idx / currentConfig.cols);
+            const c = idx % currentConfig.cols;
+            if (gridData[idx].isMine || (Math.abs(r-safeR)<=1 && Math.abs(c-safeC)<=1)) continue;
+            gridData[idx].isMine = true;
+            minesPlaced++;
+        }
+        for (let i = 0; i < gridData.length; i++) {
+            if (!gridData[i].isMine) gridData[i].neighborMines = countNeighbors(gridData[i].r, gridData[i].c);
+        }
+    }
+
+    function countNeighbors(r, c) {
+        let count = 0;
+        for (let i = -1; i <= 1; i++) {
+            for (let j = -1; j <= 1; j++) {
+                if (i===0 && j===0) continue;
+                const nr = r+i, nc = c+j;
+                if (nr>=0 && nr<currentConfig.rows && nc>=0 && nc<currentConfig.cols) {
+                    if (gridData[nr*currentConfig.cols+nc].isMine) count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    function getNeighbors(data) {
+        const arr = [];
+        for (let i = -1; i <= 1; i++) {
+            for (let j = -1; j <= 1; j++) {
+                if (i===0 && j===0) continue;
+                const nr = data.r + i, nc = data.c + j;
+                if (nr>=0 && nr<currentConfig.rows && nc>=0 && nc<currentConfig.cols) {
+                    arr.push(gridData[nr*currentConfig.cols+nc]);
+                }
+            }
+        }
+        return arr;
+    }
+
+    function explode(data) {
+        isGameOver = true;
+        clearInterval(timerInterval);
+        faceBtn.innerText = "😵";
+        data.element.classList.add('mine-exploded');
+        data.element.innerText = '💣';
+        gridData.forEach(cell => {
+            if (cell.isMine && !cell.isFlagged && cell !== data) {
+                cell.element.classList.add('mine', 'open');
+                cell.element.innerText = '💣';
+            }
+            if (!cell.isMine && cell.isFlagged) {
+                cell.element.classList.add('wrong-mine', 'open');
+            }
+        });
+    }
+
+    function checkWin() {
+        if (cellsOpened === currentConfig.rows * currentConfig.cols - currentConfig.mines) {
+            isGameOver = true;
+            clearInterval(timerInterval);
+            faceBtn.innerText = "😎";
+            mineCountEl.innerText = "000";
+            gridData.forEach(cell => {
+                if (cell.isMine && !cell.isFlagged) {
+                    cell.element.classList.add('flag');
+                    cell.element.innerText = '🚩';
+                }
+            });
+        }
+    }
+
+    function startTimer() {
+        timerInterval = setInterval(() => {
+            timeElapsed++;
+            if (timeElapsed > 999) timeElapsed = 999;
+            timerEl.innerText = timeElapsed.toString().padStart(3, '0');
+        }, 1000);
+    }
+
+    function updateMineCount() {
+        let count = currentConfig.mines - flagsUsed;
+        if (count < -99) count = -99;
+        let str = Math.abs(count).toString().padStart(3, '0');
+        if (count < 0) str = "-" + Math.abs(count).toString().padStart(2, '0');
+        mineCountEl.innerText = str;
+    }
+    
+    faceBtn.addEventListener('click', () => initGame(null));
+    // 阻止笑脸双击缩放
+    faceBtn.addEventListener('touchstart', (e) => e.stopPropagation());
+
+    initGame();
+
+</script>
+</body>
+</html>
