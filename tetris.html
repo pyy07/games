@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Tetris Pro Max</title>
+    <title>Tetris Ultra Fluid</title>
     <style>
         :root {
             --bg-color: #121218;
             --panel-bg: #22222b;
-            --accent: #ff0055; /* 换个更激进的主色调 */
+            --accent: #ff0055;
             --accent-glow: rgba(255, 0, 85, 0.5);
             --btn-bg: rgba(255, 255, 255, 0.1);
             --btn-active: rgba(255, 0, 85, 0.6);
@@ -203,7 +203,6 @@
             <span class="value" id="score">0</span>
         </div>
         
-        <!-- 增加了减号按钮 -->
         <div class="level-ctrl">
             <span class="label" style="margin-right:5px">LV</span>
             <button class="mini-btn" onclick="adjustLevel(-1)">-</button>
@@ -250,14 +249,17 @@
     const restartBtn = document.getElementById('restart-btn');
 
     // --- Game Config ---
-    // 速度表 (毫秒/格)：等级 1-20，难度更陡峭
     const LEVEL_SPEEDS = [
         800, 720, 650, 580, 520,  // 1-5
         460, 410, 360, 320, 280,  // 6-10
-        240, 210, 180, 150, 130,  // 11-15 (Very Fast)
-        110, 90,  70,  50,  30    // 16-20 (Insane)
+        240, 210, 180, 150, 130,  // 11-15 
+        110, 90,  70,  50,  30    // 16-20
     ];
-    const FAST_DROP_SPEED = 30; // 按住下落时的极速 (30ms)
+    const FAST_DROP_SPEED = 30; // 垂直下落极速
+    
+    // 水平移动 (DAS) 配置
+    const MOVE_INITIAL_DELAY = 160; // 第一次按下后等待多久开始连移 (ms)
+    const MOVE_REPEAT_SPEED = 50;   // 连移时的间隔 (ms)
 
     // --- State ---
     const ARENA_W = 12;
@@ -269,11 +271,17 @@
     let isPaused = false; 
     let animationId = null;
     let lastTime = 0;
-    let dropCounter = 0;
     
+    // 垂直相关变量
+    let dropCounter = 0;
     let level = 1;
     let currentSpeed = LEVEL_SPEEDS[0];
-    let isFastDropping = false; // 是否处于按住加速状态
+    let isFastDropping = false; 
+
+    // 水平相关变量 (DAS)
+    let moveDir = 0; // -1 (Left), 1 (Right), 0 (None)
+    let moveCounter = 0; 
+    let moveInterval = 0; // 当前需要的等待时间
 
     const COLORS = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF'];
     const PIECES = 'ILJOTSZ';
@@ -322,12 +330,9 @@
                 if (value !== 0) {
                     context.fillStyle = COLORS[value];
                     context.fillRect(x + offset.x, y + offset.y, 1, 1);
-                    // 3D效果
                     context.lineWidth = 0.05;
                     context.strokeStyle = 'rgba(255,255,255,0.5)';
                     context.strokeRect(x + offset.x, y + offset.y, 1, 1);
-                    
-                    // 内阴影
                     context.fillStyle = 'rgba(0,0,0,0.1)';
                     context.fillRect(x + offset.x + 0.1, y + offset.y + 0.8, 0.8, 0.1);
                     context.fillRect(x + offset.x + 0.8, y + offset.y + 0.1, 0.1, 0.8);
@@ -363,7 +368,7 @@
             const row = arena.splice(y, 1)[0].fill(0);
             arena.unshift(row);
             ++y;
-            player.score += rowCount * 100; // 100, 200, 400, 800
+            player.score += rowCount * 100;
             rowCount *= 2;
         }
         updateScore();
@@ -394,7 +399,6 @@
             playerReset();
             arenaSweep();
             dropCounter = 0;
-            // 如果是在极速下落中触底，不要立即停止，保持流畅
             return; 
         }
         dropCounter = 0;
@@ -423,21 +427,29 @@
         }
     }
 
-    // --- Update Loop ---
+    // --- Update Loop (Main Heartbeat) ---
     function update(time = 0) {
         if (isPaused || isGameOver) return;
-        if (!lastTime) lastTime = time; // Init check
+        if (!lastTime) lastTime = time;
 
         const deltaTime = time - lastTime;
         lastTime = time;
 
+        // 1. 处理垂直下落
         dropCounter += deltaTime;
-
-        // 关键逻辑：如果按住了下键(isFastDropping)，使用极速间隔，否则使用当前等级间隔
-        const interval = isFastDropping ? FAST_DROP_SPEED : currentSpeed;
-
-        if (dropCounter > interval) {
+        const dropSpeed = isFastDropping ? FAST_DROP_SPEED : currentSpeed;
+        if (dropCounter > dropSpeed) {
             playerDrop();
+        }
+
+        // 2. 处理水平移动 (DAS)
+        if (moveDir !== 0) {
+            moveCounter += deltaTime;
+            if (moveCounter > moveInterval) {
+                playerMove(moveDir);
+                moveCounter = 0;
+                moveInterval = MOVE_REPEAT_SPEED; // 之后进入极速模式
+            }
         }
 
         draw();
@@ -447,7 +459,6 @@
     // --- Logic ---
     function updateScore() {
         scoreEl.innerText = player.score;
-        // 自动升级：每1000分升一级
         const calcLevel = Math.floor(player.score / 1000) + 1;
         if (calcLevel > level) {
             level = calcLevel;
@@ -456,15 +467,12 @@
     }
 
     function updateLevel() {
-        // 限制 1-20
         if(level < 1) level = 1;
         if(level > 20) level = 20;
-        
         levelEl.innerText = level;
-        currentSpeed = LEVEL_SPEEDS[level - 1]; // 更新当前下落速度
+        currentSpeed = LEVEL_SPEEDS[level - 1]; 
     }
 
-    // 手动调节等级 (+/-)
     function adjustLevel(delta) {
         level += delta;
         updateLevel();
@@ -495,7 +503,7 @@
         startBtn.innerText = "PAUSE";
         startBtn.style.background = "var(--accent)";
         overlay.style.display = 'none';
-        lastTime = 0; // 重置时间防止瞬移
+        lastTime = 0; 
         update();
     }
 
@@ -514,12 +522,12 @@
         arena.forEach(row => row.fill(0));
         player.score = 0;
         scoreEl.innerText = "0";
-        // 重置时保留手动设置的等级，或者你可以选择重置为1： level = 1;
         updateLevel();
         
         isGameOver = false;
         isPaused = false;
         isFastDropping = false;
+        moveDir = 0; // 重置方向
         
         playerReset();
         overlay.style.display = 'none';
@@ -535,22 +543,21 @@
     // 键盘
     document.addEventListener('keydown', event => {
         if (isPaused || isGameOver) return;
-        if (event.keyCode === 37) { playerMove(-1); draw(); }
+        if (event.keyCode === 37) { 
+            // 键盘模拟 DAS 比较复杂，这里使用简单处理，
+            // 浏览器自带键盘重复，但为了统一逻辑，我们也可以接管：
+            // 简单起见，PC端键盘这里维持原样（浏览器自带重复），重点优化手机
+            playerMove(-1); draw(); 
+        }
         else if (event.keyCode === 39) { playerMove(1); draw(); }
         else if (event.keyCode === 40) { 
-            // 键盘按下：立即下落 + 开启极速
-            if(!isFastDropping) {
-                playerDrop(); 
-                isFastDropping = true; 
-            }
+            if(!isFastDropping) { playerDrop(); isFastDropping = true; }
         }
         else if (event.keyCode === 38) { playerRotate(1); draw(); }
     });
 
     document.addEventListener('keyup', event => {
-        if (event.keyCode === 40) {
-            isFastDropping = false; // 键盘松开：关闭极速
-        }
+        if (event.keyCode === 40) isFastDropping = false;
     });
 
     // 触控通用绑定
@@ -579,29 +586,46 @@
         btn.addEventListener('mouseleave', endHandler);
     }
 
-    // 绑定左右和旋转 (点按触发)
-    bindBtn('btn-left', { onStart: () => playerMove(-1) });
-    bindBtn('btn-right', { onStart: () => playerMove(1) });
+    // --- 左右键逻辑更新：支持长按连移 ---
+    
+    // 设置水平移动状态
+    function setMove(dir) {
+        moveDir = dir;
+        moveCounter = 0; 
+        moveInterval = MOVE_INITIAL_DELAY; // 第一次等待长一点
+        playerMove(dir); // 立即移动一次
+    }
+
+    // 清除水平移动状态
+    function clearMove() {
+        moveDir = 0;
+    }
+
+    bindBtn('btn-left', { 
+        onStart: () => setMove(-1),
+        onEnd: () => clearMove()
+    });
+
+    bindBtn('btn-right', { 
+        onStart: () => setMove(1),
+        onEnd: () => clearMove()
+    });
+
     bindBtn('btn-rotate', { onStart: () => playerRotate(1) });
 
-    // 绑定下落键 (特殊处理：按下立即触发一次 + 开启加速状态)
     bindBtn('btn-down', {
         onStart: () => {
-            playerDrop(); // 立即动一下，给反馈
-            isFastDropping = true; // 开启加速标志
-            dropCounter = 0; // 重置计时器，让下一帧立刻基于 FAST_DROP_SPEED 判断
+            playerDrop(); 
+            isFastDropping = true; 
+            dropCounter = 0; 
         },
         onEnd: () => {
-            isFastDropping = false; // 关闭加速
+            isFastDropping = false;
         }
     });
 
     // Init
     resetGame();
-    // 默认暂停，等待用户点击开始，或者直接运行看喜好。
-    // 为了防止打开直接挂掉，先进入Pause状态或者Reset状态。
-    // 上面的 resetGame 已经把 isPaused = false 了，所以打开会自动开始。
-    // 如果想打开是暂停的，可以在这里加 pauseGame();
     
 </script>
 </body>
