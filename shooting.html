@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEON DEFENSE - 单文件FPS</title>
+    <style>
+        /* CSS 样式设计 */
+        :root {
+            --primary: #0ff;
+            --danger: #f05;
+            --friendly: #0f5;
+            --elite: #b0f;
+            --bg: #050510;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: var(--bg);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+            cursor: none; /* 隐藏默认鼠标 */
+        }
+
+        /* 游戏场景容器 - 模拟3D透视 */
+        #game-world {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            perspective: 800px; /* 关键：3D透视深度 */
+            overflow: hidden;
+            background: radial-gradient(circle at center, #1a1a2e 0%, #000 100%);
+        }
+
+        /* 准星 */
+        #crosshair {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border: 2px solid var(--primary);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 100;
+            transition: width 0.1s, height 0.1s;
+        }
+        #crosshair::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 4px;
+            height: 4px;
+            background: var(--primary);
+            transform: translate(-50%, -50%);
+        }
+        #crosshair.reloading {
+            border-color: #555;
+            animation: spin 1s infinite linear;
+        }
+
+        /* 敌人与物体 */
+        .entity {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform-style: preserve-3d;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 0 10px currentColor;
+            cursor: pointer;
+        }
+
+        .enemy {
+            width: 60px;
+            height: 60px;
+            background: rgba(255, 0, 85, 0.2);
+            border: 2px solid var(--danger);
+            color: var(--danger);
+        }
+
+        .friendly {
+            width: 50px;
+            height: 50px;
+            background: rgba(0, 255, 85, 0.2);
+            border: 2px solid var(--friendly);
+            color: var(--friendly);
+            border-radius: 50%;
+        }
+
+        .elite {
+            width: 50px;
+            height: 50px;
+            background: rgba(187, 0, 255, 0.2);
+            border: 2px solid var(--elite);
+            color: var(--elite);
+            transform: rotate(45deg);
+        }
+
+        /* HUD 界面 */
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: var(--primary);
+            font-size: 20px;
+            z-index: 90;
+            text-shadow: 0 0 5px var(--primary);
+        }
+        
+        #ammo-display {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            font-size: 32px;
+            color: var(--primary);
+            z-index: 90;
+        }
+        .low-ammo { color: var(--danger) !important; animation: blink 0.5s infinite; }
+
+        #damage-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            box-shadow: inset 0 0 0 0 var(--danger);
+            pointer-events: none;
+            transition: box-shadow 0.1s;
+            z-index: 80;
+        }
+
+        /* 菜单屏幕 */
+        .screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 200;
+        }
+        .hidden { display: none; }
+        
+        h1 { font-size: 60px; color: var(--primary); text-transform: uppercase; margin: 0; text-shadow: 0 0 20px var(--primary); }
+        p { font-size: 18px; color: #ccc; max-width: 600px; text-align: center; line-height: 1.6; }
+        button {
+            margin-top: 30px;
+            padding: 15px 40px;
+            font-size: 24px;
+            background: transparent;
+            color: var(--primary);
+            border: 2px solid var(--primary);
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+        button:hover { background: var(--primary); color: black; box-shadow: 0 0 20px var(--primary); }
+
+        /* 动画 */
+        @keyframes spin { 100% { transform: translate(-50%, -50%) rotate(360deg); } }
+        @keyframes blink { 50% { opacity: 0.5; } }
+        
+        /* 枪火特效 */
+        .muzzle-flash {
+            position: absolute;
+            width: 100px; height: 100px;
+            background: radial-gradient(circle, #fff, transparent);
+            transform: translate(-50%, -50%);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 99;
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- 游戏世界 -->
+    <div id="game-world"></div>
+    
+    <!-- 受伤红屏特效 -->
+    <div id="damage-overlay"></div>
+
+    <!-- UI 界面 -->
+    <div id="hud">
+        <div>SCORE: <span id="score">0</span></div>
+        <div>HP: <span id="hp">100</span>%</div>
+    </div>
+    <div id="ammo-display">10 / ∞</div>
+
+    <!-- 自定义准星 -->
+    <div id="crosshair"></div>
+    <div id="muzzle-flash" class="muzzle-flash"></div>
+
+    <!-- 开始菜单 -->
+    <div id="start-screen" class="screen">
+        <h1>Neon Defense</h1>
+        <p>
+            <strong style="color:var(--danger)">红色方块</strong> 是敌人 - 消灭它们。<br>
+            <strong style="color:var(--friendly)">绿色圆形</strong> 是友军 - 不要射击！<br>
+            <strong style="color:var(--elite)">紫色菱形</strong> 是精英 - 速度极快。<br>
+            <br>
+            <strong>左键</strong> 射击 | <strong>右键/R键</strong> 换弹
+        </p>
+        <button onclick="startGame()">开始任务</button>
+    </div>
+
+    <!-- 结束菜单 -->
+    <div id="game-over-screen" class="screen hidden">
+        <h1 style="color: var(--danger)">任务失败</h1>
+        <p>最终得分: <span id="final-score" style="color: white; font-size: 30px">0</span></p>
+        <button onclick="startGame()">重试</button>
+    </div>
+
+    <script>
+        /**
+         * 游戏逻辑与引擎
+         */
+
+        // 状态变量
+        let gameState = {
+            isPlaying: false,
+            score: 0,
+            hp: 100,
+            ammo: 10,
+            maxAmmo: 10,
+            isReloading: false,
+            lastSpawn: 0,
+            spawnRate: 2000, // 初始生成间隔(ms)
+            difficultyMultiplier: 1
+        };
+
+        const world = document.getElementById('game-world');
+        const crosshair = document.getElementById('crosshair');
+        const ammoDisplay = document.getElementById('ammo-display');
+        const damageOverlay = document.getElementById('damage-overlay');
+        const muzzleFlash = document.getElementById('muzzle-flash');
+        
+        // 实体列表
+        let entities = [];
+        let animationFrameId;
+
+        // 音频合成器 (无需外部文件)
+        const AudioSys = {
+            ctx: null,
+            init: function() {
+                window.AudioContext = window.AudioContext || window.webkitAudioContext;
+                this.ctx = new AudioContext();
+            },
+            playTone: function(freq, type, duration, vol = 0.1) {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + duration);
+            },
+            shoot: function() { this.playTone(800, 'square', 0.1, 0.1); this.playTone(400, 'sawtooth', 0.15, 0.1); },
+            empty: function() { this.playTone(200, 'sine', 0.05, 0.2); },
+            reload: function() { this.playTone(600, 'sine', 0.2, 0.1); setTimeout(()=>this.playTone(1000, 'sine', 0.1, 0.1), 200); },
+            hit: function() { this.playTone(150, 'sawtooth', 0.3, 0.2); },
+            damage: function() { this.playTone(100, 'square', 0.5, 0.3); },
+            powerup: function() { this.playTone(1200, 'sine', 0.3, 0.1); }
+        };
+
+        // 鼠标追踪
+        document.addEventListener('mousemove', (e) => {
+            crosshair.style.left = e.clientX + 'px';
+            crosshair.style.top = e.clientY + 'px';
+        });
+
+        // 射击控制
+        document.addEventListener('mousedown', (e) => {
+            if (!gameState.isPlaying) return;
+            
+            if (e.button === 0) { // 左键
+                fire();
+            } else if (e.button === 2) { // 右键
+                reload();
+            }
+        });
+
+        // 键盘控制 (R键换弹)
+        document.addEventListener('keydown', (e) => {
+            if (!gameState.isPlaying) return;
+            if (e.key.toLowerCase() === 'r') reload();
+        });
+
+        // 禁用右键菜单
+        document.addEventListener('contextmenu', event => event.preventDefault());
+
+        function fire() {
+            if (gameState.isReloading) return;
+
+            if (gameState.ammo <= 0) {
+                AudioSys.empty();
+                ammoDisplay.classList.add('low-ammo');
+                return;
+            }
+
+            gameState.ammo--;
+            updateHUD();
+            AudioSys.shoot();
+            
+            // 视觉后坐力与闪光
+            crosshair.style.width = '60px';
+            crosshair.style.height = '60px';
+            muzzleFlash.style.left = crosshair.style.left;
+            muzzleFlash.style.top = crosshair.style.top;
+            muzzleFlash.style.opacity = 0.8;
+            setTimeout(() => {
+                crosshair.style.width = '40px';
+                crosshair.style.height = '40px';
+                muzzleFlash.style.opacity = 0;
+            }, 50);
+
+            // 命中检测
+            checkHit();
+        }
+
+        function reload() {
+            if (gameState.isReloading || gameState.ammo === gameState.maxAmmo) return;
+            gameState.isReloading = true;
+            crosshair.classList.add('reloading');
+            ammoDisplay.textContent = "RELOADING...";
+            AudioSys.reload();
+
+            setTimeout(() => {
+                gameState.ammo = gameState.maxAmmo;
+                gameState.isReloading = false;
+                crosshair.classList.remove('reloading');
+                updateHUD();
+            }, 800);
+        }
+
+        // 实体类
+        class Entity {
+            constructor(type) {
+                this.element = document.createElement('div');
+                this.type = type; // 'enemy', 'friendly', 'elite'
+                this.x = (Math.random() - 0.5) * window.innerWidth * 0.8; // 随机 X 散布
+                this.y = (Math.random() - 0.5) * window.innerHeight * 0.8; // 随机 Y 散布
+                this.z = -2000; // 初始深度 (远离屏幕)
+                this.speed = 10 + (gameState.score / 100); // 随分数加速
+                this.dead = false;
+                
+                this.element.classList.add('entity');
+                if (type === 'enemy') {
+                    this.element.classList.add('enemy');
+                } else if (type === 'friendly') {
+                    this.element.classList.add('friendly');
+                } else {
+                    this.element.classList.add('elite');
+                    this.speed *= 1.5;
+                }
+
+                world.appendChild(this.element);
+            }
+
+            update() {
+                if (this.dead) return;
+
+                // 简单的3D移动逻辑：Z轴增加
+                this.z += this.speed * 2; // 向玩家移动
+
+                // 计算透视缩放和位置
+                // 简单的透视公式：scale = perspective / (perspective - z)
+                // 这里我们反过来，因为z是从负数变向0
+                // 为了简化CSS处理，我们直接用 translate3d
+                
+                // 稍微向边缘扩散，制造"穿过隧道"的感觉
+                const progress = (this.z + 2000) / 2000; 
+                const currentX = this.x * progress;
+                const currentY = this.y * progress;
+
+                this.element.style.transform = `translate3d(${currentX}px, ${currentY}px, ${this.z}px)`;
+
+                // 碰撞检测（撞到玩家）
+                if (this.z > 600) {
+                    this.onPlayerHit();
+                }
+            }
+
+            onPlayerHit() {
+                this.remove();
+                if (this.type === 'friendly') {
+                    // 友军撞到玩家算好事吗？不算，算逃脱。
+                    // 这里的逻辑是：必须射杀敌人，避开友军
+                    // 如果友军撞到玩家屏幕，算安全撤离，不扣血
+                    AudioSys.powerup(); 
+                } else {
+                    takeDamage(20);
+                }
+            }
+
+            hit() {
+                if (this.dead) return;
+                this.dead = true;
+                
+                // 爆炸特效
+                createExplosion(this.element.getBoundingClientRect());
+
+                if (this.type === 'friendly') {
+                    takeDamage(10); // 误伤惩罚
+                    gameState.score -= 50;
+                } else if (this.type === 'elite') {
+                    gameState.score += 50;
+                    AudioSys.hit();
+                } else {
+                    gameState.score += 10;
+                    AudioSys.hit();
+                }
+
+                this.remove();
+                updateHUD();
+            }
+
+            remove() {
+                this.dead = true;
+                if(this.element.parentNode) this.element.parentNode.removeChild(this.element);
+                entities = entities.filter(e => e !== this);
+            }
+        }
+
+        function createExplosion(rect) {
+            const centerX = rect.left + rect.width/2;
+            const centerY = rect.top + rect.height/2;
+            
+            const particleCount = 8;
+            for(let i=0; i<particleCount; i++) {
+                const p = document.createElement('div');
+                p.style.position = 'absolute';
+                p.style.left = centerX + 'px';
+                p.style.top = centerY + 'px';
+                p.style.width = '4px';
+                p.style.height = '4px';
+                p.style.background = 'white';
+                p.style.pointerEvents = 'none';
+                world.appendChild(p);
+
+                // 随机扩散动画
+                const angle = Math.random() * Math.PI * 2;
+                const velocity = Math.random() * 50 + 20;
+                const tx = Math.cos(angle) * velocity;
+                const ty = Math.sin(angle) * velocity;
+
+                p.animate([
+                    { transform: 'translate(0,0) scale(1)', opacity: 1 },
+                    { transform: `translate(${tx}px, ${ty}px) scale(0)`, opacity: 0 }
+                ], {
+                    duration: 400,
+                    easing: 'ease-out'
+                }).onfinish = () => p.remove();
+            }
+        }
+
+        function checkHit() {
+            // 获取准星中心位置的元素
+            // 由于使用了 CSS 3D transform，elementFromPoint 仍然有效
+            const rect = crosshair.getBoundingClientRect();
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            
+            // 暂时隐藏准星和特效以免挡住检测
+            crosshair.style.display = 'none';
+            muzzleFlash.style.display = 'none';
+            
+            const el = document.elementFromPoint(cx, cy);
+            
+            crosshair.style.display = 'block';
+            muzzleFlash.style.display = 'block';
+
+            // 查找是否点击到了实体
+            const entityObj = entities.find(e => e.element === el || e.element.contains(el));
+            
+            if (entityObj) {
+                entityObj.hit();
+            }
+        }
+
+        function takeDamage(amount) {
+            gameState.hp -= amount;
+            AudioSys.damage();
+            
+            // 屏幕红闪
+            damageOverlay.style.boxShadow = 'inset 0 0 50px 20px rgba(255,0,0,0.5)';
+            setTimeout(() => damageOverlay.style.boxShadow = 'inset 0 0 0 0 var(--danger)', 200);
+
+            if (gameState.hp <= 0) {
+                gameOver();
+            }
+            updateHUD();
+        }
+
+        function updateHUD() {
+            document.getElementById('score').innerText = gameState.score;
+            document.getElementById('hp').innerText = Math.max(0, gameState.hp);
+            document.getElementById('ammo-display').innerText = `${gameState.ammo} / ∞`;
+            
+            if (gameState.ammo <= 3) ammoDisplay.classList.add('low-ammo');
+            else ammoDisplay.classList.remove('low-ammo');
+        }
+
+        function spawnLoop(timestamp) {
+            if (!gameState.isPlaying) return;
+
+            // 随时间增加难度
+            if (timestamp - gameState.lastSpawn > gameState.spawnRate) {
+                const rand = Math.random();
+                let type = 'enemy';
+                
+                if (rand > 0.9) type = 'elite';
+                else if (rand > 0.8) type = 'friendly';
+
+                entities.push(new Entity(type));
+                gameState.lastSpawn = timestamp;
+
+                // 增加难度：生成速率最高 400ms
+                if (gameState.spawnRate > 400) {
+                    gameState.spawnRate -= 10;
+                }
+            }
+
+            // 更新所有实体
+            entities.forEach(e => e.update());
+
+            animationFrameId = requestAnimationFrame(spawnLoop);
+        }
+
+        function startGame() {
+            AudioSys.init(); // 浏览器要求用户交互后才能播放音频
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            
+            // 重置状态
+            gameState.isPlaying = true;
+            gameState.score = 0;
+            gameState.hp = 100;
+            gameState.ammo = 10;
+            gameState.spawnRate = 2000;
+            gameState.lastSpawn = 0;
+            
+            // 清理旧实体
+            entities.forEach(e => {
+                if(e.element.parentNode) e.element.parentNode.removeChild(e.element);
+            });
+            entities = [];
+
+            updateHUD();
+            animationFrameId = requestAnimationFrame(spawnLoop);
+        }
+
+        function gameOver() {
+            gameState.isPlaying = false;
+            cancelAnimationFrame(animationFrameId);
+            document.getElementById('final-score').innerText = gameState.score;
+            document.getElementById('game-over-screen').classList.remove('hidden');
+        }
+
+    </script>
+</body>
+</html>
