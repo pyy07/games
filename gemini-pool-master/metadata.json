@@ -1,0 +1,5 @@
+{
+  "name": "Gemini Pool Master",
+  "description": "A sophisticated 8-ball pool game where you challenge an AI opponent powered by a local physics engine for gameplay and Google Gemini for strategic commentary and trash talk.",
+  "requestFramePermissions": []
+}

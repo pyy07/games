@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Gemini Pool Master</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+      
+      :root {
+        --bg-color: #0f172a;
+        --text-color: #e2e8f0;
+        --panel-bg: #1e293b;
+        --border-color: #451a03;
+        --accent-green: #22c55e;
+        --accent-blue: #3b82f6;
+        --accent-red: #ef4444;
+      }
+
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        margin: 0;
+        padding: 0;
+        overscroll-behavior: none;
+      }
+
+      #root {
+        width: 100%;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .app-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 10px;
+        width: 100%;
+        box-sizing: border-box;
+        max-width: 800px;
+        margin: 0 auto;
+      }
+
+      header {
+        text-align: center;
+        margin-bottom: 1rem;
+        width: 100%;
+      }
+
+      h1 {
+        font-size: 1.8rem;
+        font-weight: 800;
+        background: linear-gradient(to right, #4ade80, #3b82f6);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        margin: 0 0 0.5rem 0;
+      }
+
+      p.subtitle {
+        color: #94a3b8;
+        font-size: 0.9rem;
+        margin: 0;
+        line-height: 1.4;
+      }
+
+      .game-wrapper {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .status-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: var(--panel-bg);
+        padding: 10px 15px;
+        border-radius: 8px;
+        font-weight: 600;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        font-size: 0.9rem;
+      }
+
+      .player-active { color: var(--accent-green); }
+      .robot-active { color: var(--accent-red); }
+      .text-muted { color: #64748b; }
+
+      .canvas-container {
+        position: relative;
+        width: 100%;
+        border-radius: 6px;
+        overflow: hidden;
+        border: 6px solid var(--border-color);
+        background: #000;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        /* Maintain aspect ratio space */
+        aspect-ratio: 2 / 1; 
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        touch-action: none; /* Critical for mobile drag */
+        cursor: crosshair;
+      }
+
+      .overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(0,0,0,0.8);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+        animation: fadeIn 0.3s ease;
+      }
+
+      .btn-primary {
+        background-color: var(--accent-green);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 1rem;
+        cursor: pointer;
+        margin-top: 10px;
+      }
+
+      .chat-box {
+        background-color: #111827;
+        border: 1px solid #374151;
+        border-radius: 8px;
+        padding: 10px;
+        height: 160px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .chat-label {
+        font-size: 0.7rem;
+        color: #64748b;
+        text-transform: uppercase;
+        font-weight: bold;
+        margin-bottom: 4px;
+      }
+
+      .message-row {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+      }
+      .message-row.right {
+        flex-direction: row-reverse;
+      }
+
+      .avatar {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.6rem;
+        font-weight: bold;
+        flex-shrink: 0;
+      }
+      
+      .avatar.bot { background-color: #7f1d1d; color: #fecaca; }
+      .avatar.you { background-color: #14532d; color: #bbf7d0; }
+      .avatar.sys { background-color: #334155; color: #cbd5e1; }
+
+      .bubble {
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        max-width: 85%;
+        line-height: 1.3;
+        word-wrap: break-word;
+      }
+      
+      .bubble.bot { background-color: rgba(69, 10, 10, 0.5); color: #fee2e2; border: 1px solid rgba(127, 29, 29, 0.5); }
+      .bubble.you { background-color: rgba(20, 83, 45, 0.5); color: #dcfce7; border: 1px solid rgba(20, 83, 45, 0.5); }
+      .bubble.sys { background-color: #1e293b; color: #94a3b8; font-style: italic; }
+
+      footer {
+        margin-top: 20px;
+        font-size: 0.75rem;
+        color: #475569;
+        text-align: center;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      /* Mobile optimizations */
+      @media (max-width: 600px) {
+        h1 { font-size: 1.5rem; }
+        .app-container { padding: 8px; }
+        .canvas-container { border-width: 4px; }
+        .status-bar { padding: 8px 10px; font-size: 0.8rem; }
+        .chat-box { height: 120px; }
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://esm.sh/@google/genai@^1.33.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3"
+  }
+}
+</script>
+<link rel="stylesheet" href="./index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="./index.tsx"></script>
+</body>
+</html>
