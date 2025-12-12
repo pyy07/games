@@ -5,6 +5,219 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>小游戏合集</title>
     <style>
+      /* Table Tennis 游戏样式 */
+      .table-tennis-game {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: #0f172a;
+        z-index: 1000;
+        font-family: 'Inter', sans-serif;
+      }
+      
+      .table-tennis-game.active {
+        display: flex;
+        flex-direction: column;
+      }
+      
+      .table-tennis-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 10px;
+        width: 100%;
+        box-sizing: border-box;
+        max-width: 800px;
+        margin: 0 auto;
+      }
+      
+      .table-tennis-header {
+        text-align: center;
+        margin-bottom: 1rem;
+        width: 100%;
+      }
+      
+      .table-tennis-title {
+        font-size: 1.8rem;
+        font-weight: 800;
+        background: linear-gradient(to right, #4ade80, #3b82f6);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        margin: 0 0 0.5rem 0;
+      }
+      
+      .table-tennis-subtitle {
+        color: #94a3b8;
+        font-size: 0.9rem;
+        margin: 0;
+        line-height: 1.4;
+      }
+      
+      .table-tennis-game-wrapper {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      
+      .table-tennis-status-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: #1e293b;
+        padding: 10px 15px;
+        border-radius: 8px;
+        font-weight: 600;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        font-size: 0.9rem;
+      }
+      
+      .player-active { color: #22c55e; }
+      
+      .robot-active { color: #ef4444; }
+      
+      .text-muted { color: #64748b; }
+      
+      .table-tennis-canvas-container {
+        position: relative;
+        width: 100%;
+        border-radius: 6px;
+        overflow: hidden;
+        border: 6px solid #451a03;
+        background: #000;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        aspect-ratio: 2 / 1; 
+      }
+      
+      .table-tennis-canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+        cursor: crosshair;
+      }
+      
+      .table-tennis-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(0,0,0,0.8);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+        animation: fadeIn 0.3s ease;
+      }
+      
+      .table-tennis-btn-primary {
+        background-color: #22c55e;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 1rem;
+        cursor: pointer;
+        margin-top: 10px;
+      }
+      
+      .table-tennis-chat-box {
+        background-color: #111827;
+        border: 1px solid #374151;
+        border-radius: 8px;
+        padding: 10px;
+        height: 160px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      
+      .table-tennis-chat-label {
+        font-size: 0.7rem;
+        color: #64748b;
+        text-transform: uppercase;
+        font-weight: bold;
+        margin-bottom: 4px;
+      }
+      
+      .table-tennis-message-row {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+      }
+      
+      .table-tennis-message-row.right {
+        flex-direction: row-reverse;
+      }
+      
+      .table-tennis-avatar {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.6rem;
+        font-weight: bold;
+        flex-shrink: 0;
+      }
+      
+      .table-tennis-avatar.bot { background-color: #7f1d1d; color: #fecaca; }
+      
+      .table-tennis-avatar.you { background-color: #14532d; color: #bbf7d0; }
+      
+      .table-tennis-avatar.sys { background-color: #334155; color: #cbd5e1; }
+      
+      .table-tennis-bubble {
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        max-width: 85%;
+        line-height: 1.3;
+        word-wrap: break-word;
+      }
+      
+      .table-tennis-bubble.bot { background-color: rgba(69, 10, 10, 0.5); color: #fee2e2; border: 1px solid rgba(127, 29, 29, 0.5); }
+      
+      .table-tennis-bubble.you { background-color: rgba(20, 83, 45, 0.5); color: #dcfce7; border: 1px solid rgba(20, 83, 45, 0.5); }
+      
+      .table-tennis-bubble.sys { background-color: #1e293b; color: #94a3b8; font-style: italic; }
+      
+      .table-tennis-close-btn {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        color: white;
+        font-size: 1.5rem;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1001;
+      }
+      
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      
+      @media (max-width: 600px) {
+        .table-tennis-title { font-size: 1.5rem; }
+        .table-tennis-container { padding: 8px; }
+        .table-tennis-canvas-container { border-width: 4px; }
+        .table-tennis-status-bar { padding: 8px 10px; font-size: 0.8rem; }
+        .table-tennis-chat-box { height: 120px; }
+      }
         * {
             margin: 0;
             padding: 0;
@@ -28,6 +241,7 @@
             position: sticky;
             top: 0;
             z-index: 100;
+            display: none;
         }
 
         .header-content {
@@ -78,6 +292,9 @@
             transition: transform 0.3s ease, box-shadow 0.3s ease;
             cursor: pointer;
             position: relative;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
         }
 
         .game-card:hover {
@@ -130,6 +347,9 @@
 
         .game-info {
             padding: 25px;
+            display: flex;
+            flex-direction: column;
+            height: calc(100% - 200px);
         }
 
         .game-title {
@@ -143,6 +363,7 @@
             color: #666;
             line-height: 1.6;
             margin-bottom: 20px;
+            flex: 1;
         }
 
         .play-button {
@@ -155,6 +376,8 @@
             font-weight: 600;
             transition: all 0.3s ease;
             box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            margin-top: auto;
+            align-self: flex-start;
         }
 
         .play-button:hover {
@@ -235,16 +458,16 @@
         .game-card.shader-pilot .game-image {
             background: linear-gradient(135deg, #8e2de2 0%, #4a00e0 100%);
         }
+
+        /* 乒乓球游戏特定样式 */
+        .game-card.table-tennis .game-image {
+            background: linear-gradient(135deg, #00b4d8 0%, #0077b6 100%);
+        }
     </style>
 </head>
 <body>
     <header>
-        <div class="header-content">
-            <div>
-                <h1>小游戏合集</h1>
-                <p class="subtitle">精选经典小游戏，随时随地畅玩</p>
-            </div>
-        </div>
+        <div class="header-content"></div>
     </header>
 
     <main>
@@ -304,6 +527,20 @@
                     <a href="shaderPilot/index.html" class="play-button">开始游戏</a>
                 </div>
             </article>
+
+            <!-- 桌球游戏卡片 -->
+            <article class="game-card table-tennis">
+                <div class="game-image">
+                    🎱
+                </div>
+                <div class="game-info">
+                    <h2 class="game-title">桌球</h2>
+                    <p class="game-description">
+                        经典桌球游戏，与AI对手对战。使用鼠标控制球杆角度和力度，体验真实的物理效果！
+                    </p>
+                    <a href="poolMaster/index.html" class="play-button">开始游戏</a>
+                </div>
+            </article>
         </section>
     </main>
 
@@ -313,6 +550,40 @@
 
     <!-- 添加游戏按钮 (预留功能) -->
     <button class="add-game-btn" title="添加新游戏">+</button>
+
+    <!-- Table Tennis 游戏容器 -->
+    <div class="table-tennis-game" id="poolMasterGame">
+        <button class="table-tennis-close-btn" onclick="closePoolMaster()">×</button>
+        <div class="table-tennis-container">
+            <header class="table-tennis-header">
+                <h1 class="table-tennis-title">桌球大师</h1>
+                <p class="table-tennis-subtitle">与AI对战，体验真实物理效果</p>
+            </header>
+            <div class="table-tennis-game-wrapper">
+                <div class="table-tennis-status-bar">
+                    <span>玩家: <span id="playerScore" class="player-active">0</span></span>
+                    <span id="gameStatus" class="text-muted">准备开始</span>
+                    <span>AI: <span id="aiScore" class="robot-active">0</span></span>
+                </div>
+                <div class="table-tennis-canvas-container">
+                    <canvas id="poolMasterCanvas" class="table-tennis-canvas"></canvas>
+                    <div id="poolMasterOverlay" class="table-tennis-overlay">
+                        <h2 style="color: white; margin-bottom: 20px;">点击开始游戏</h2>
+                        <button id="startPoolMasterBtn" class="table-tennis-btn-primary">开始游戏</button>
+                    </div>
+                </div>
+                <div class="table-tennis-chat-box">
+                    <div class="table-tennis-chat-label">游戏消息</div>
+                    <div id="poolMasterMessages">
+                        <div class="table-tennis-message-row">
+                            <div class="table-tennis-avatar sys">系统</div>
+                            <div class="table-tennis-bubble sys">欢迎来到桌球大师！使用鼠标控制球杆。</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script>
         // 为游戏卡片添加点击事件
@@ -330,6 +601,8 @@
         document.querySelector('.add-game-btn').addEventListener('click', function() {
             alert('添加游戏功能即将推出！');
         });
+
+        
 
         // 页面加载动画
         window.addEventListener('load', function() {
